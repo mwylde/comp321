@@ -7,8 +7,8 @@ struct
   structure L1Parse = L1Parse : PARSE
   open L1Parse
 
-  structure L1Cbv = L1Cbv : EVAL
-  open L1Cbv
+  (* structure L1Cbv = L1Cbv : EVAL
+  open L1Cbv *)
 
   structure U = UnitTest
 
@@ -19,7 +19,7 @@ struct
   fun do_test_ast(name, test, exp) = 
     U.do_test(name, fn () => parse_expression (sl test), exp, Ast.ast2str)
 
-  fun do_test_eval(name, test, exp) =
+  (* fun do_test_eval(name, test, exp) =
     U.do_test(name, 
               fn () => value2ast (eval_expr (
                             parse_expression (sl test))), exp, Ast.ast2str)
@@ -29,7 +29,7 @@ struct
                 fn () => value2ast (eval_pgm (
                             parse_program (fl ("test_files/" ^ filename)))),
                 exp,
-                Ast.ast2str)
+                Ast.ast2str) *)
 
   val test_ast = fn () => (
 
@@ -39,6 +39,8 @@ struct
     do_test_ast("Ident2", "xyz ;", Ast.Ident("xyz")) ;
 
     do_test_ast("Num. const.", "5 ;", Ast.Number(5)) ;
+    
+    do_test_ast("Alg1", "5+4;", Ast.BinOp(Ast.PLUS, Ast.Number(5), Ast.Number(4)));
 
     do_test_ast("Bool1", "x andalso y;",
       Ast.BinOp(Ast.AND, Ast.Ident "x", Ast.Ident "y")) ;
@@ -117,55 +119,58 @@ struct
     true
   )
 
-  val test_eval = fn () => (
-    do_test_eval("Eval num 1", "5;", Ast.Number(5)) ;
-    do_test_eval("Eval true", "true;", Ast.Boolean(true)) ;
-    do_test_eval("Eval arith 2", "2 - 2;", Ast.Number(0)) ;
-    do_test_eval("Eval cond. 2", "if false then 0 else 1 fi;", Ast.Number(1)) ;
-    do_test_eval("Eval cond. 3", "if 3 <= 5 then 0 else 1 fi;", Ast.Number(0)) ;
+  (* val test_eval = fn () => ( *)
+  (*   do_test_eval("Eval num 1", "5;", Ast.Number(5)) ; *)
+  (*   do_test_eval("Eval true", "true;", Ast.Boolean(true)) ; *)
+  (*   do_test_eval("Eval arith 2", "2 - 2;", Ast.Number(0)) ; *)
+  (*   do_test_eval("Eval cond. 2", "if false then 0 else 1 fi;", Ast.Number(1)) ; *)
+  (*   do_test_eval("Eval cond. 3", "if 3 <= 5 then 0 else 1 fi;", Ast.Number(0)) ; *)
 
-    do_test_eval("Eval list 1", "[];", Ast.NilList) ;
-    do_test_eval("Eval list 2", "1 :: [];", 
-        Ast.BinOp(Ast.CONS, Ast.Number(1), Ast.NilList)) ;
-    do_test_eval("Eval list 3", "1 :: 2 :: [];",
-        Ast.BinOp(Ast.CONS, 
-                  Ast.Number(1), 
-                  Ast.BinOp(Ast.CONS, Ast.Number(2), Ast.NilList))) ;
-    do_test_eval("Eval list 5", "((fn x => fn y => x + y)(2)) :: [];",
-        Ast.BinOp(Ast.CONS, Ast.Abs("y", 
-                           Ast.BinOp(Ast.PLUS, Ast.Number(2), Ast.Ident("y"))),
-                           Ast.NilList)) ;
+  (*   do_test_eval("Eval list 1", "[];", Ast.NilList) ; *)
+  (*   do_test_eval("Eval list 2", "1 :: [];",  *)
+  (*       Ast.BinOp(Ast.CONS, Ast.Number(1), Ast.NilList)) ; *)
+  (*   do_test_eval("Eval list 3", "1 :: 2 :: [];", *)
+  (*       Ast.BinOp(Ast.CONS,  *)
+  (*                 Ast.Number(1),  *)
+  (*                 Ast.BinOp(Ast.CONS, Ast.Number(2), Ast.NilList))) ; *)
+  (*   do_test_eval("Eval list 5", "((fn x => fn y => x + y)(2)) :: [];", *)
+  (*       Ast.BinOp(Ast.CONS, Ast.Abs("y",  *)
+  (*                          Ast.BinOp(Ast.PLUS, Ast.Number(2), Ast.Ident("y"))), *)
+  (*                          Ast.NilList)) ; *)
                     
-    do_test_eval("Eval hd/tl 3", "hd tl (1 :: 2 :: []);", Ast.Number(2)) ;
+  (*   do_test_eval("Eval hd/tl 3", "hd tl (1 :: 2 :: []);", Ast.Number(2)) ; *)
 
-    do_test_eval("Eval abs 1", "fn x => x;", 
-        Ast.Abs("x", Ast.Ident("x"))) ;
-    do_test_eval("Eval abs 3", "(fn x => fn y => x + y)(2);",
-        Ast.Abs("y", Ast.BinOp(Ast.PLUS, Ast.Number(2), Ast.Ident("y")))) ;
+  (*   do_test_eval("Eval abs 1", "fn x => x;",  *)
+  (*       Ast.Abs("x", Ast.Ident("x"))) ; *)
+  (*   do_test_eval("Eval abs 3", "(fn x => fn y => x + y)(2);", *)
+  (*       Ast.Abs("y", Ast.BinOp(Ast.PLUS, Ast.Number(2), Ast.Ident("y")))) ; *)
 
-    do_test_eval("Eval app 3", "(fn x => x)(fn y => y + y);",
-        Ast.Abs("y", Ast.BinOp(Ast.PLUS, Ast.Ident("y"),
-        Ast.Ident("y")))) ;
+  (*   do_test_eval("Eval app 3", "(fn x => x)(fn y => y + y);", *)
+  (*       Ast.Abs("y", Ast.BinOp(Ast.PLUS, Ast.Ident("y"), *)
+  (*       Ast.Ident("y")))) ; *)
 
-    true
-  )
+  (*   true *)
+  (* ) *)
 
-  fun test_eval_file() = 
-  let
-    val files_results = [
-        ("t3.l1", Ast.Number 8)
-    ]
-    fun test_files [] = true
-      | test_files ((test, res) :: frs) = 
-            (do_test_file_eval test res ; test_files frs)
-  in
-    test_files files_results
-  end
+  (* fun test_eval_file() =  *)
+  (* let *)
+  (*   val files_results = [ *)
+  (*       ("t3.l1", Ast.Number 8) *)
+  (*   ] *)
+  (*   fun test_files [] = true *)
+  (*     | test_files ((test, res) :: frs) =  *)
+  (*           (do_test_file_eval test res ; test_files frs) *)
+  (* in *)
+  (*   test_files files_results *)
+  (* end *)
 
 
   fun run_tests(arg0 : string, args : string list) = 
     BackTrace.monitor(fn () =>
-      (U.run_tests(fn () => (test_ast() ; test_eval() ; test_eval_file() )) ; 0)
+      (U.run_tests(fn () => (test_ast()
+                             (*test_eval() ; 
+                             test_eval_file() *)
+                  )) ; 0)
     )
 
 end

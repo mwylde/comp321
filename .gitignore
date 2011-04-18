@@ -1,0 +1,4 @@
+src/.cm
+test/.cm
+test/testing.x86-darwin
+src/l1.lex.sml

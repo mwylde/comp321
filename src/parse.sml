@@ -1,4 +1,4 @@
-structure Parse =
+structure L1Parse =
 struct
 
 structure T = Tokens
@@ -68,17 +68,16 @@ fun force_ops (trees, []) = (trees, [])
   | force_ops (trees, op'::[]) = force_op (trees, []) op'
   | force_ops (trees, op1::op2::ops) =
     let 
-        val comp = case (opAssoc op1) of Left => op >=
-                                       | Right => op >
+        val comp = case (opAssoc op1) of Left => op <=
+                                       | Right => op <
     in
         if comp(opPrec op1, opPrec op2) 
         then force_ops (force_op (trees, op2::ops) op1)
         else (trees, op1::op2::ops)
     end
 
-fun force_all_ops (trees, []) = (trees, [])
-  | force_all_ops (trees, op'::ops) = 
-    force_all_ops (force_op (trees, ops) op')
+fun combine_trees (t::trees, NoOp::ops) = (t::trees, ops)
+  | combine_trees (trees, op'::ops) = combine_trees (force_op (trees, ops) op')
 
 fun handle_binop (trees, ops) binop =
     force_ops (trees, (opFromBinOp binop)::ops)
@@ -89,7 +88,7 @@ fun handle_unop (trees, ops) unop =
 fun handle_lparen (trees, ops) =
     (trees, NoOp::ops)
 
-val handle_rparen = force_all_ops
+val handle_rparen = combine_trees
 
 fun handle_ident (trees, ops) s =
     ((A.Ident s)::trees, ops)
@@ -110,11 +109,11 @@ fun handle_token ps (T.Unop unop)   = handle_unop ps unop
 fun parse_expression t =
     let
       fun parse_rec (trees, ops) =
-          case t() of T.EOF => hd trees
-                    | T.EOS => hd trees
+          case t() of T.EOF => (#1 (combine_trees (trees, ops)))
+                    | T.EOS => (#1 (combine_trees (trees, ops)))
                     | tok => parse_rec (handle_token (trees, ops) tok)
     in
-      parse_rec ([], [])
+      parse_rec ([], [NoOp])
     end
 
 fun parse_program t = raise undefined_error

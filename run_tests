@@ -1,8 +1,0 @@
-#!/bin/bash
-
-# rm .x86-darwin
-
-ml-build -Ctdp.instrument=true \$smlnj-tdp/back-trace.cm tests/l1.cm Tests.run_tests testing
-
-sml @SMLload=testing.x86-darwin
-echo ""
