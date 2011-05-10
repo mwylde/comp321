@@ -132,7 +132,8 @@ fun force_op (t::trees, (Lambda x)::ops) = ((Abs (x, t))::trees, ops)
 
 fun force_ops NoOp (BGroup::trees, NoOp::ops) = (trees, ops)
   | force_ops NoOp (BGroup::trees, ILParen::ops) = force_ops NoOp (trees, ops)
-  | force_ops _ (trees, NoOp::ops) = (collect_apps true trees, ops)
+  | force_ops NoOp (trees, NoOp::ops) = (trees, ops)
+  | force_ops _ (trees, NoOp::ops) = (collect_apps true trees, NoOp::ops)
   | force_ops op1 (trees, ILParen::ops) = force_ops op1 (collect_apps false trees, ops)
   | force_ops _ (trees, []) = (trees, [])
   | force_ops op1 (trees, op2::ops) =
@@ -167,7 +168,7 @@ fun handle_unop (trees, ops) unop =
     end
 
 fun handle_lparen (trees, ops) =
-    (trees, NoOp::ops)
+    (BGroup::trees, NoOp::ops)
 
 val handle_rparen = force_all_ops
 
@@ -236,14 +237,23 @@ fun exp2str BGroup = "BGroup"
 fun parse_expression t =
     let 
         fun parse_rec (trees, ops) =
-            ((print ((exp2str (hd trees)) ^ "\n")); 
+(*            ((print ((exp2str (hd trees)) ^ "\n"));  *)
              case t() of T.EOF => (#1 (force_all_ops (trees, ops)))
                        | T.EOS => (#1 (handle_rparen (trees, ops)))
-                       | tok => parse_rec (handle_token (trees, ops) tok))
+                       | tok => parse_rec (handle_token (trees, ops) tok)
     in
         expToAST (hd (parse_rec ([BGroup], [NoOp])))
     end
 
-fun parse_program t = raise undefined_error
-
+fun parse_program t = 
+    let
+        fun parse_rec s = 
+            case t() 
+             of T.EOF => s
+              | (T.Assign x) => parse_rec 
+                                    ((A.Assign (x, parse_expression t))::s)
+              | _ => raise (parse_error "unexpected token")
+    in
+        A.Program (parse_rec [])
+    end
 end
