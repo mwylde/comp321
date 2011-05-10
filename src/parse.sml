@@ -6,7 +6,8 @@ structure A = Ast
 
 datatype Operator = NoOp | Plus | Minus | Times | Div | Neg |
                     Lt | Leq | Gt | Geq | Eq | Neq | And | Or |
-                    Cons | Not | Head | Tail
+                    Cons | Not | Head | Tail | 
+                    If | Then | Else | Endif
 
 datatype Associativity = Left | Right
 datatype Arrity = Unary | Binary
@@ -14,8 +15,10 @@ datatype Arrity = Unary | Binary
 exception parse_error of string
 exception undefined_error
 exception unhandled_op
+exception unexpected_token
 
 fun opPrec NoOp  = 0
+  | opPrec (If | Then | Else | Endif) = 0
   | opPrec (And | Or) = 10
   | opPrec (Lt | Leq | Gt | Geq | Eq | Neq) = 20
   | opPrec Cons = 30
@@ -26,10 +29,12 @@ fun opPrec NoOp  = 0
 fun opAssoc (NoOp | Plus | Minus | Times | Div)         = Left
   | opAssoc (And | Or | Lt | Leq | Gt | Geq | Eq | Neq) = Left
   | opAssoc (Neg | Head | Tail | Not | Cons)            = Right
+  | opAssoc (If | Then | Else | Endif)                  = Left
 
 fun opArrity (NoOp | Plus | Minus | Times | Div | Cons)  = Binary
   | opArrity (And | Or | Lt | Leq | Gt | Geq | Eq | Neq) = Binary
   | opArrity (Neg | Head | Tail | Not)                   = Unary
+  | opArrity (If | Then | Else | Endif)                  = Binary
 
 fun opFromBinOp A.PLUS  = Plus
   | opFromBinOp A.SUB   = Minus
@@ -79,7 +84,7 @@ fun force_op ps op' =
           | force_unop _ _ = raise (parse_error "need argument")
 
         fun force_binop (x::y::trees, ops) binop =
-            ((A.BinOp(binOpFromOp binop, x, y))::trees, ops)
+            ((A.BinOp(binOpFromOp binop, y, x))::trees, ops)
           | force_binop _ _ = raise (parse_error "need argument")
     in
         case (opArrity op') of Unary => force_unop ps op'
@@ -99,6 +104,9 @@ fun force_ops (trees, []) = (trees, [])
     end
 
 fun combine_trees (t::trees, NoOp::ops) = (t::trees, ops)
+  | combine_trees (t::trees, If::ops) = (t::trees, If::ops)
+  | combine_trees (t::trees, Then::ops) = (t::trees, Then::ops)
+  | combine_trees (t::trees, Else::ops) = (t::trees, Else::ops)
   | combine_trees (trees, op'::ops) = combine_trees (force_op (trees, ops) op')
   | combine_trees _ = raise (parse_error "Unexpected end of input")
 
@@ -122,6 +130,24 @@ fun handle_num (trees, ops) x =
 fun handle_bool (trees, ops) x =
     ((A.Boolean x)::trees, ops)
 
+(* conditional handling code *)
+fun handle_if (trees, ops) =
+    (trees, If::ops)
+
+fun handle_then (trees, ops) = 
+    (trees, Then::ops)
+
+fun handle_else (trees, ops) =
+    (trees, Else::ops)
+
+fun handle_endif (t::t'::t''::trees, op'::op''::op'''::ops) =
+    (* make sure we have the right stuff on the op stack *)
+    if (op''', op'', op') = (If, Then, Else) then
+       (A.Cond(t'', t', t)::trees, ops)
+    else raise (parse_error "Invalid conditional")
+  | handle_endif (t::t'::t''::trees, _) = raise undefined_error
+  | handle_endif _ = raise (parse_error "Invalid conditional")
+
 
 fun handle_token ps (T.Unop unop)   = handle_unop ps unop
   | handle_token ps (T.Binop binop) = handle_binop ps binop
@@ -131,6 +157,10 @@ fun handle_token ps (T.Unop unop)   = handle_unop ps unop
   | handle_token ps (T.Num x)       = handle_num ps x
   | handle_token ps T.True          = handle_bool ps true
   | handle_token ps T.False         = handle_bool ps false
+  | handle_token ps T.If            = handle_if ps
+  | handle_token ps T.Then          = handle_then (combine_trees ps)
+  | handle_token ps T.Else          = handle_else (combine_trees ps)
+  | handle_token ps T.Endif         = handle_endif (combine_trees ps)
   | handle_token _ _ = raise (parse_error "unknown token")
 
 
@@ -141,7 +171,7 @@ fun parse_expression t =
                     | T.EOS => (#1 (combine_trees (trees, ops)))
                     | tok => parse_rec (handle_token (trees, ops) tok))
     in
-      parse_rec ([A.Ident "a"], [NoOp])
+      hd (parse_rec ([A.Ident "a"], [NoOp]))
     end
 
 fun parse_program t = raise undefined_error
