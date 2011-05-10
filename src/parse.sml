@@ -116,7 +116,7 @@ fun combine_trees (t::trees, NoOp::ops) = (t::trees, ops)
   | combine_trees _ = raise (parse_error "Unexpected end of input")
 
 fun handle_binop (trees, ops) binop =
-    (print "BinOP"; force_ops (trees, (opFromBinOp binop)::ops))
+    force_ops (trees, (opFromBinOp binop)::ops)
 
 fun handle_unop (trees, ops) unop =
     force_ops (trees, (opFromUnOp unop)::ops)
@@ -134,6 +134,13 @@ fun handle_num (trees, ops) x =
 
 fun handle_bool (trees, ops) x =
     ((A.Boolean x)::trees, ops)
+
+(* list handling code *)
+fun handle_cons (trees, ops) =
+    force_ops (trees, Cons::ops)
+
+fun handle_nil (trees, ops) =
+    (A.NilList::trees, ops)
 
 (* conditional handling code *)
 fun handle_if (trees, ops) =
@@ -170,6 +177,8 @@ fun handle_token ps (T.Unop unop)   = handle_unop ps unop
   | handle_token ps T.Else          = handle_else (combine_trees ps)
   | handle_token ps T.Endif         = handle_endif (combine_trees ps)
   | handle_token ps (T.Lambda x)    = handle_lambda ps x
+  | handle_token ps T.Nil           = handle_nil ps
+  | handle_token ps T.Cons          = handle_cons ps
   | handle_token _ _ = raise (parse_error "unknown token")
 
 
