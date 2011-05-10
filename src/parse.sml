@@ -4,11 +4,22 @@ struct
 structure T = Tokens
 structure A = Ast
 
-datatype Operator = NoOp | Plus | Minus | Times | Div | Neg |
+datatype operator = NoOp | Plus | Minus | Times | Div | Neg |
                     Lt | Leq | Gt | Geq | Eq | Neq | And | Or |
                     Cons | Not | Head | Tail | 
                     If | Then | Else | Endif |
-                    Lambda of string
+                    Lambda of string |
+                    ILParen
+
+type ident = string
+
+datatype expr = Ident of ident | 
+    Number of int | Boolean of bool | 
+    UnOp of operator*expr | BinOp of operator*expr*expr | 
+    NilList |
+    Cond of expr*expr*expr |
+    Abs of ident*expr | App of expr*expr |
+    BGroup
 
 datatype Associativity = Left | Right
 datatype Arrity = Unary | Binary
@@ -18,7 +29,7 @@ exception undefined_error
 exception unhandled_op
 exception unexpected_token
 
-fun opPrec NoOp  = 0
+fun opPrec (NoOp | ILParen) = 0
   | opPrec (If | Then | Else | Endif) = 0
   | opPrec (Lambda _) = 0
   | opPrec (And | Or) = 10
@@ -28,17 +39,17 @@ fun opPrec NoOp  = 0
   | opPrec (Times | Div) = 50
   | opPrec (Neg | Head | Tail | Not) = 60
 
-fun opAssoc (NoOp | Plus | Minus | Times | Div)         = Left
-  | opAssoc (And | Or | Lt | Leq | Gt | Geq | Eq | Neq) = Left
-  | opAssoc (Neg | Head | Tail | Not | Cons)            = Right
-  | opAssoc (If | Then | Else | Endif)                  = Left
-  | opAssoc (Lambda _)                                  = Right
+fun opAssoc (NoOp | ILParen | Plus | Minus | Times | Div) = Left
+  | opAssoc (And | Or | Lt | Leq | Gt | Geq | Eq | Neq)   = Left
+  | opAssoc (Neg | Head | Tail | Not | Cons)              = Right
+  | opAssoc (If | Then | Else | Endif)                    = Left
+  | opAssoc (Lambda _)                                    = Right
 
-fun opArrity (NoOp | Plus | Minus | Times | Div | Cons)  = Binary
-  | opArrity (And | Or | Lt | Leq | Gt | Geq | Eq | Neq) = Binary
-  | opArrity (Neg | Head | Tail | Not)                   = Unary
-  | opArrity (If | Then | Else | Endif)                  = Binary
-  | opArrity (Lambda _)                                  = Unary
+fun opArrity (ILParen | NoOp | Plus | Minus | Times | Div | Cons)  = Binary
+  | opArrity (And | Or | Lt | Leq | Gt | Geq | Eq | Neq)           = Binary
+  | opArrity (Neg | Head | Tail | Not)                             = Unary
+  | opArrity (If | Then | Else | Endif)                            = Binary
+  | opArrity (Lambda _)                                            = Unary
 
 fun opFromBinOp A.PLUS  = Plus
   | opFromBinOp A.SUB   = Minus
@@ -79,16 +90,26 @@ fun unOpFromOp Neg = A.NEG
   | unOpFromOp Head = A.HEAD
   | unOpFromOp Tail = A.TAIL
   | unOpFromOp _ = raise unhandled_op
-                       
+
+fun expToAST (Ident x) = A.Ident x
+  | expToAST (Number x) = A.Number x
+  | expToAST (Boolean b) = A.Boolean b
+  | expToAST (UnOp(unop, e)) = A.UnOp(unOpFromOp unop, expToAST e)
+  | expToAST (BinOp(b, e1, e2)) = A.BinOp(binOpFromOp b, expToAST e1, expToAST e2)
+  | expToAST NilList = A.NilList
+  | expToAST (Cond(e1, e2, e3)) = A.Cond(expToAST e1, expToAST e2, expToAST e3)
+  | expToAST (Abs(s, e)) = A.Abs (s, expToAST e)
+  | expToAST (App(e1, e2)) = A.App (expToAST e1, expToAST e2)
+  | expToAST BGroup = raise (parse_error "unexpected BGroup")
 
 fun force_op ps op' =
     let
         fun force_unop (x::trees, ops) unop =
-            ((A.UnOp(unOpFromOp unop, x))::trees, ops)
+            (UnOp(unop, x)::trees, ops)
           | force_unop _ _ = raise (parse_error "need argument")
 
         fun force_binop (x::y::trees, ops) binop =
-            ((A.BinOp(binOpFromOp binop, y, x))::trees, ops)
+            (BinOp(binop, y, x)::trees, ops)
           | force_binop _ _ = raise (parse_error "need argument")
     in
         case (opArrity op') of Unary => force_unop ps op'
@@ -111,7 +132,7 @@ fun combine_trees (t::trees, NoOp::ops) = (t::trees, ops)
   | combine_trees (t::trees, If::ops) = (t::trees, If::ops)
   | combine_trees (t::trees, Then::ops) = (t::trees, Then::ops)
   | combine_trees (t::trees, Else::ops) = (t::trees, Else::ops)
-  | combine_trees (t::trees, (Lambda x)::ops) = ((A.Abs (x, t))::trees, ops)
+  | combine_trees (t::trees, (Lambda x)::ops) = ((Abs (x, t))::trees, ops)
   | combine_trees (trees, op'::ops) = combine_trees (force_op (trees, ops) op')
   | combine_trees _ = raise (parse_error "Unexpected end of input")
 
@@ -127,20 +148,20 @@ fun handle_lparen (trees, ops) =
 val handle_rparen = combine_trees
 
 fun handle_ident (trees, ops) s =
-    ((A.Ident s)::trees, ops)
+    ((Ident s)::trees, ops)
 
 fun handle_num (trees, ops) x =
-    ((A.Number x)::trees, ops)
+    ((Number x)::trees, ops)
 
 fun handle_bool (trees, ops) x =
-    ((A.Boolean x)::trees, ops)
+    ((Boolean x)::trees, ops)
 
 (* list handling code *)
 fun handle_cons (trees, ops) =
     force_ops (trees, Cons::ops)
 
 fun handle_nil (trees, ops) =
-    (A.NilList::trees, ops)
+    (NilList::trees, ops)
 
 (* conditional handling code *)
 fun handle_if (trees, ops) =
@@ -155,7 +176,7 @@ fun handle_else (trees, ops) =
 fun handle_endif (t::t'::t''::trees, op'::op''::op'''::ops) =
     (* make sure we have the right stuff on the op stack *)
     if (op''', op'', op') = (If, Then, Else) then
-       (A.Cond(t'', t', t)::trees, ops)
+       (Cond(t'', t', t)::trees, ops)
     else raise (parse_error "Invalid conditional")
   | handle_endif (t::t'::t''::trees, _) = raise undefined_error
   | handle_endif _ = raise (parse_error "Invalid conditional")
@@ -181,15 +202,16 @@ fun handle_token ps (T.Unop unop)   = handle_unop ps unop
   | handle_token ps T.Cons          = handle_cons ps
   | handle_token _ _ = raise (parse_error "unknown token")
 
+fun exp2str e = A.ast2str (expToAST e)
 
 fun parse_expression t =
     let
       fun parse_rec (trees, ops) =
-          ((print ((A.ast2str (hd trees)) ^ "\n")); case t() of T.EOF => (#1 (combine_trees (trees, ops)))
+          ((print ((exp2str (hd trees)) ^ "\n")); case t() of T.EOF => (#1 (combine_trees (trees, ops)))
                     | T.EOS => (#1 (combine_trees (trees, ops)))
                     | tok => parse_rec (handle_token (trees, ops) tok))
     in
-      hd (parse_rec ([A.Ident "a"], [NoOp]))
+      expToAST (hd (parse_rec ([Ident "a"], [NoOp])))
     end
 
 fun parse_program t = raise undefined_error
