@@ -7,7 +7,8 @@ structure A = Ast
 datatype Operator = NoOp | Plus | Minus | Times | Div | Neg |
                     Lt | Leq | Gt | Geq | Eq | Neq | And | Or |
                     Cons | Not | Head | Tail | 
-                    If | Then | Else | Endif
+                    If | Then | Else | Endif |
+                    Lambda of string
 
 datatype Associativity = Left | Right
 datatype Arrity = Unary | Binary
@@ -19,6 +20,7 @@ exception unexpected_token
 
 fun opPrec NoOp  = 0
   | opPrec (If | Then | Else | Endif) = 0
+  | opPrec (Lambda _) = 0
   | opPrec (And | Or) = 10
   | opPrec (Lt | Leq | Gt | Geq | Eq | Neq) = 20
   | opPrec Cons = 30
@@ -30,11 +32,13 @@ fun opAssoc (NoOp | Plus | Minus | Times | Div)         = Left
   | opAssoc (And | Or | Lt | Leq | Gt | Geq | Eq | Neq) = Left
   | opAssoc (Neg | Head | Tail | Not | Cons)            = Right
   | opAssoc (If | Then | Else | Endif)                  = Left
+  | opAssoc (Lambda _)                                  = Right
 
 fun opArrity (NoOp | Plus | Minus | Times | Div | Cons)  = Binary
   | opArrity (And | Or | Lt | Leq | Gt | Geq | Eq | Neq) = Binary
   | opArrity (Neg | Head | Tail | Not)                   = Unary
   | opArrity (If | Then | Else | Endif)                  = Binary
+  | opArrity (Lambda _)                                  = Unary
 
 fun opFromBinOp A.PLUS  = Plus
   | opFromBinOp A.SUB   = Minus
@@ -107,6 +111,7 @@ fun combine_trees (t::trees, NoOp::ops) = (t::trees, ops)
   | combine_trees (t::trees, If::ops) = (t::trees, If::ops)
   | combine_trees (t::trees, Then::ops) = (t::trees, Then::ops)
   | combine_trees (t::trees, Else::ops) = (t::trees, Else::ops)
+  | combine_trees (t::trees, (Lambda x)::ops) = ((A.Abs (x, t))::trees, ops)
   | combine_trees (trees, op'::ops) = combine_trees (force_op (trees, ops) op')
   | combine_trees _ = raise (parse_error "Unexpected end of input")
 
@@ -148,6 +153,9 @@ fun handle_endif (t::t'::t''::trees, op'::op''::op'''::ops) =
   | handle_endif (t::t'::t''::trees, _) = raise undefined_error
   | handle_endif _ = raise (parse_error "Invalid conditional")
 
+(* abstraction *)
+fun handle_lambda (trees, ops) x =
+    (force_ops (trees, (Lambda x)::ops))
 
 fun handle_token ps (T.Unop unop)   = handle_unop ps unop
   | handle_token ps (T.Binop binop) = handle_binop ps binop
@@ -161,6 +169,7 @@ fun handle_token ps (T.Unop unop)   = handle_unop ps unop
   | handle_token ps T.Then          = handle_then (combine_trees ps)
   | handle_token ps T.Else          = handle_else (combine_trees ps)
   | handle_token ps T.Endif         = handle_endif (combine_trees ps)
+  | handle_token ps (T.Lambda x)    = handle_lambda ps x
   | handle_token _ _ = raise (parse_error "unknown token")
 
 
