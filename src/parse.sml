@@ -128,24 +128,44 @@ fun force_ops (trees, []) = (trees, [])
         else (trees, op1::op2::ops)
     end
 
-fun combine_trees (t::trees, NoOp::ops) = (t::trees, ops)
-  | combine_trees (t::trees, If::ops) = (t::trees, If::ops)
-  | combine_trees (t::trees, Then::ops) = (t::trees, Then::ops)
-  | combine_trees (t::trees, Else::ops) = (t::trees, Else::ops)
-  | combine_trees (t::trees, (Lambda x)::ops) = ((Abs (x, t))::trees, ops)
-  | combine_trees (trees, op'::ops) = combine_trees (force_op (trees, ops) op')
-  | combine_trees _ = raise (parse_error "Unexpected end of input")
+fun collect_apps true (BGroup::trees) = BGroup::trees
+  | collect_apps false (BGroup::trees) = trees
+  | collect_apps _ [] = []
+  | collect_apps r (t::trees) = 
+    case (collect_apps r trees) of (BGroup::trees') => t::BGroup::trees'
+                                 | (t'::trees') => (App(t', t))::trees'
+                                 | ([]) => [t]
+
+(* combine_trees forcing_due_to_RParen ps *)
+fun combine_trees false (t::trees, NoOp::ops) = (collect_apps true (t::trees), ops)
+  | combine_trees false (t::trees, ILParen::ops) = combine_trees false (collect_apps false (t::trees), ops)
+  | combine_trees true  (BGroup::trees, NoOp::ops) = (trees, ops)
+  | combine_trees true  (t::trees, NoOp::ops) = (t::trees, ops)
+  | combine_trees _ (t::trees, If::ops) = (t::trees, If::ops)
+  | combine_trees _ (t::trees, Then::ops) = (t::trees, Then::ops)
+  | combine_trees _ (t::trees, Else::ops) = (t::trees, Else::ops)
+  | combine_trees _ (t::trees, (Lambda x)::ops) = ((Abs (x, t))::trees, ops)
+  | combine_trees r (trees, op'::ops) = combine_trees r (force_op (trees, ops) op')
+  | combine_trees _ _ = raise (parse_error "Unexpected end of input")
 
 fun handle_binop (trees, ops) binop =
-    force_ops (trees, (opFromBinOp binop)::ops)
+    let 
+        val (trees', ops') = force_ops (trees, (opFromBinOp binop)::ops)
+    in
+        (BGroup::trees', ILParen::ops')
+    end
 
 fun handle_unop (trees, ops) unop =
-    force_ops (trees, (opFromUnOp unop)::ops)
+    let
+        val (trees', ops') = force_ops (trees, (opFromUnOp unop)::ops)
+    in
+        (BGroup::trees', ILParen::ops')
+    end
 
 fun handle_lparen (trees, ops) =
-    (trees, NoOp::ops)
+    (BGroup::trees, NoOp::ops)
 
-val handle_rparen = combine_trees
+val handle_rparen = combine_trees true
 
 fun handle_ident (trees, ops) s =
     ((Ident s)::trees, ops)
@@ -194,24 +214,25 @@ fun handle_token ps (T.Unop unop)   = handle_unop ps unop
   | handle_token ps T.True          = handle_bool ps true
   | handle_token ps T.False         = handle_bool ps false
   | handle_token ps T.If            = handle_if ps
-  | handle_token ps T.Then          = handle_then (combine_trees ps)
-  | handle_token ps T.Else          = handle_else (combine_trees ps)
-  | handle_token ps T.Endif         = handle_endif (combine_trees ps)
+  | handle_token ps T.Then          = handle_then (combine_trees false ps)
+  | handle_token ps T.Else          = handle_else (combine_trees false ps)
+  | handle_token ps T.Endif         = handle_endif (combine_trees false ps)
   | handle_token ps (T.Lambda x)    = handle_lambda ps x
   | handle_token ps T.Nil           = handle_nil ps
   | handle_token ps T.Cons          = handle_cons ps
   | handle_token _ _ = raise (parse_error "unknown token")
 
-fun exp2str e = A.ast2str (expToAST e)
+fun exp2str BGroup = "BGroup"
+  | exp2str e =  A.ast2str (expToAST e)
 
 fun parse_expression t =
     let
       fun parse_rec (trees, ops) =
-          ((print ((exp2str (hd trees)) ^ "\n")); case t() of T.EOF => (#1 (combine_trees (trees, ops)))
-                    | T.EOS => (#1 (combine_trees (trees, ops)))
+          ((print ((exp2str (hd trees)) ^ "\n")); case t() of T.EOF => (#1 (combine_trees false (trees, ops)))
+                    | T.EOS => (#1 (combine_trees false (trees, ops)))
                     | tok => parse_rec (handle_token (trees, ops) tok))
     in
-      expToAST (hd (parse_rec ([Ident "a"], [NoOp])))
+      expToAST (hd (parse_rec ([BGroup], [NoOp])))
     end
 
 fun parse_program t = raise undefined_error
