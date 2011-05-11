@@ -312,8 +312,8 @@ struct
       (U.run_tests(fn () => (
         test_ast() ; 
         test_eval() ; 
-        test_eval_file() ;
-        test_typing()
+        test_eval_file() (* ;
+        test_typing() *)
         )) ; 0)
     )
 

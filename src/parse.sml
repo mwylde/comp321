@@ -237,9 +237,8 @@ fun exp2str BGroup = "BGroup"
 fun parse_expression t =
     let 
         fun parse_rec (trees, ops) =
-(*            ((print ((exp2str (hd trees)) ^ "\n"));  *)
-             case t() of T.EOF => (#1 (force_all_ops (trees, ops)))
-                       | T.EOS => (#1 (handle_rparen (trees, ops)))
+            (* ((print ((exp2str (hd trees)) ^ "\n")); *)
+             case t() of T.EOS => (#1 (handle_rparen (trees, ops)))
                        | tok => parse_rec (handle_token (trees, ops) tok)
     in
         expToAST (hd (parse_rec ([BGroup], [ILParen])))
@@ -248,7 +247,7 @@ fun parse_expression t =
 fun parse_program t = 
     let
         fun parse_rec s = 
-            case t() 
+            case t()
              of T.EOF => s
               | (T.Assign x) => parse_rec 
                                     ((A.Assign (x, parse_expression t))::s)
