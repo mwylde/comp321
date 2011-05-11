@@ -10,9 +10,11 @@ exception only_idents
 
 exception free_var_in_expr
 
+datatype 'a result = Found of 'a | NotFound
+
 (* Finds the specified key in a (k, v) list *)
-fun find [] a = raise free_var_in_expr
-  | find ((k, v)::xs) a = if k = a then v else find xs a
+fun find [] a = NotFound
+  | find ((k, v)::xs) a = if k = a then Found v else find xs a
 
 (* inserts the value at the key, replacing what's there if neccessary *)
 fun insert [] (k, v) = [(k, v)]
@@ -50,7 +52,9 @@ fun eval_val (V (ve, e)) =
         val eval_or = eval_bool_bin (fn (a, b) => a orelse b)
 
         fun eval_neg (V (Number x, _)) = V (Number (~x), [])
+          | eval_neg _ = raise expected_number
         fun eval_not (V (Boolean a, _)) = V (Boolean (not a), [])
+          | eval_not _ = raise expected_bool
 
         fun eval_unop unop e =
             let 
@@ -104,7 +108,8 @@ fun eval_val (V (ve, e)) =
             let
                 val (V (Ident x, env)) = v
             in
-                find env x
+                case find env x of (Found v) => eval_val v
+                                 | NotFound => raise free_var_in_expr
             end
             
     in case ve 
@@ -112,7 +117,7 @@ fun eval_val (V (ve, e)) =
          | (BinOp(binop, e1, e2)) => eval_binop binop (V (e1, e)) (V (e2, e))
          | (Cond(e1, e2, e3)) => eval_cond (V (e1, e)) (V (e2, e)) (V (e3,e))
          | (App(l, ve)) => eval_app (V (l, e)) (V (ve, e))
-         | (Ident x) => eval_ident (V (ve, e))
+         | (Ident _) => eval_ident (V (ve, e))
          | _ => (V (ve, e))
     end
 
@@ -120,6 +125,19 @@ fun eval_expr e = eval_val (V (e, []))
 
 fun eval_pgm _ = raise undefined
 
-fun value2ast (V (e, _)) = e
+fun value2ast (V (Ident x, env)) = 
+    (case find env x of (Found v) => value2ast(v)
+                     | NotFound => Ident x)    
+  | value2ast (V (UnOp(unop, ve), env)) =
+    UnOp (unop, value2ast (V (ve, env)))
+  | value2ast (V (BinOp(binop, e1, e2), env)) =
+    BinOp (binop, value2ast (V (e1, env)), value2ast (V (e2, env)))
+  | value2ast (V (Cond(e1, e2, e3), env)) =
+    Cond (value2ast (V (e1, env)), value2ast(V (e2, env)), value2ast (V (e3, env)))
+  | value2ast (V (App(l, ve), env)) =
+    App (value2ast (V (l, env)), value2ast (V (ve, env)))
+  | value2ast (V (Abs (x, e0), env)) =
+    Abs (x, value2ast (V (e0, env)))
+  | value2ast (V (ve, _)) = ve
 
 end
