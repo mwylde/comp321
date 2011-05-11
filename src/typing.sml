@@ -42,7 +42,7 @@ fun unop_t A.NEG _ = (Int, Int)
 
 datatype 'a result = Found of 'a | NotFound
 
-fun remove [] a = raise undefined
+fun remove [] a = []
   | remove (x::xs) a = if x = a then remove xs a else x::(remove xs a)
 
 (* Finds the specified key in a (k, v) list *)
@@ -114,7 +114,7 @@ fun lex2lab (Number (_, l)) = l
 fun gen_es (Number (x, l)) es = (l, Int)::es
   | gen_es (Boolean (b, l)) es = (l, Bool)::es
   | gen_es (Ident (s, l)) es = es
- (* | gen_es (NilList l) es = (List l)::es *)
+  | gen_es (NilList l) es = (l, List l)::es
   | gen_es (UnOp (unop, e, l)) es = 
     let
         val (t1, t2) = unop_t unop (lex2lab e)
@@ -133,38 +133,41 @@ fun gen_es (Number (x, l)) es = (l, Int)::es
   | gen_es (App (e1, e2, l)) es =
     (lex2lab e1, Arrow (lex2lab e2, l))::((gen_es e1 [])@(gen_es e2 [])@es)
 
-fun unify (t1, t2) env =
+
+fun unify (t1, t2) envx =
     let
-        fun subst env (Arrow (a, b)) = Arrow (subst env a, subst env b)
+       val env' = remove envx (t1, t2)
+       fun subst env (Arrow (a, b)) = Arrow (subst env a, subst env b)
           | subst env (V v) = (case findv env v of (Found x) => x
                                                 | _ => (V v))
           | subst env t = t
-
-        fun tsubst env (V v) = (case findv env v of (Found x) => x
+                          
+       fun tsubst env (V v) = (case findv env v of (Found x) => x
                                                  | _ => (V v))
-          | tsubst _ t = t
+         | tsubst _ t = t
 
-        fun free v Int _ = true
-          | free v1 (V v2) env = (case findv env v2 of (Found t) => free v1 t env
-                                                    | NotFound => v1 <> v2)
-          | free v (Arrow (t1, t2)) env = free v t1 env andalso free v t2 env
+       fun bound v Int _ = false
+         | bound v Bool _ = false
+         | bound v1 (V v2) env = (case findv env v2 of (Found t) => bound v1 t env
+                                                     | NotFound => v1 = v2)
+         | bound v (Arrow (t1, t2)) env = bound v t1 env orelse bound v t2 env
+                                                                 
+       fun unify_var v1 (V v2) env = if v1 = v2 then env
+                                     else insertv env (v1, V v2)
+         | unify_var v1 t2 env = if bound v1 t2 env
+                                 then insertv env (v1, subst env t2)
+                                 else insertv env (v1, subst env t2)
 
-        fun unify_var v1 (V v2) env = if v1 = v2 then env
-                                      else insertv env (v1, V v2)
-          | unify_var v1 v2 env = if free v1 t2 env
-                                  then insertv env (v1, t2)
-                                  else raise infer_error
-
-        fun unify' Bool Bool env = env
-          | unify' Int Int env = env
-          | unify' (Arrow (a, b)) (Arrow (c, d)) env =
-            unify (a, c) (unify (b, d) env)
-          | unify' t (V v) env = unify_var v t env
-          | unify' (V v) t env = unify_var v t env
-          | unify' t1 t2 _ = raise infer_error
+       fun unify' Bool Bool env = env
+         | unify' Int Int env = env
+         | unify' (Arrow (a, b)) (Arrow (c, d)) env =
+           unify (a, c) (unify (b, d) env)
+         | unify' (V v) t env = unify_var v t env
+         | unify' t (V v) env = unify_var v t env
+         | unify' t1 t2 _ = raise infer_error
 
     in
-        unify' (tsubst env t1) (tsubst env t2) env
+        unify' (tsubst env' t1) (tsubst env' t2) env'
     end
 
 fun toString (V v) =
@@ -177,9 +180,7 @@ fun toString (V v) =
                                    toString(t2) ^ ")"
   | toString (List(sigma)) = "[" ^ toString(sigma) ^ "]"
 
-end
-
-fun print_eq (t1, t2) = print ((toString t1) ^ " && " ^ (toString t2) ^ "\n")
+fun print_eq (t1, t2) = print ((toString t1) ^ " = " ^ (toString t2) ^ "\n")
 
 fun infer e = 
     let
@@ -197,7 +198,7 @@ fun infer e =
                 else run env'
             end
     in
-        run eqns
+        case findv (run (run eqns)) 0 of (Found t) => t
+                                       | _ => raise infer_error
     end
-    
-
+end
