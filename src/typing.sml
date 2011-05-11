@@ -19,28 +19,31 @@ datatype lexpr = Ident of ident*t |
     Cond of lexpr*lexpr*lexpr*t |
     Abs of (ident*t)*lexpr*t | App of lexpr*lexpr*t
 
-fun binop_t A.PLUS _ _  = Arrow (Int, Arrow (Int, Int))
-  | binop_t A.SUB _ _   = Arrow (Int, Arrow (Int, Int))
-  | binop_t A.TIMES _ _ = Arrow (Int, Arrow (Int, Int))
-  | binop_t A.DIV _ _   = Arrow (Int, Arrow (Int, Int))
-  | binop_t A.LT _ _    = Arrow (Int, Arrow (Int, Bool))
-  | binop_t A.LE _ _    = Arrow (Int, Arrow (Int, Bool))
-  | binop_t A.GT _ _    = Arrow (Int, Arrow (Int, Bool))
-  | binop_t A.GE _ _    = Arrow (Int, Arrow (Int, Bool))
-  | binop_t A.EQ a _    = Arrow (a, Arrow (a, Bool))
-  | binop_t A.NE a _    = Arrow (a, Arrow (a, Bool))
-  | binop_t A.AND _ _   = Arrow (Bool, Arrow (Bool, Bool))
-  | binop_t A.OR _ _    = Arrow (Bool, Arrow (Bool, Bool))
-  | binop_t A.CONS a _  = Arrow (a, Arrow(List a, List a))
+fun binop_t A.PLUS  _ _ = (Int, Int, Int)
+  | binop_t A.SUB   _ _ = (Int, Int, Int)
+  | binop_t A.TIMES _ _ = (Int, Int, Int)
+  | binop_t A.DIV   _ _ = (Int, Int, Int)
+  | binop_t A.LT    _ _ = (Int, Int, Bool)
+  | binop_t A.LE    _ _ = (Int, Int, Bool)
+  | binop_t A.GT    _ _ = (Int, Int, Bool)
+  | binop_t A.GE    _ _ = (Int, Int, Bool)
+  | binop_t A.EQ    a b = (a, a, Bool)
+  | binop_t A.NE    a b = (a, a, Bool)
+  | binop_t A.AND   _ _ = (Bool, Bool, Bool)
+  | binop_t A.OR    _ _ = (Bool, Bool, Bool)
+  | binop_t A.CONS a (List b) = (a, List a, List a)
+  | binop_t _ _ _ = raise infer_error
 
-fun unop_t A.NEG _ = Arrow (Int, Int)
-  | unop_t A.NOT _ = Arrow (Bool, Bool)
-  | unop_t A.HEAD (List a) = Arrow (List a, a)
-  | unop_t A.HEAD _ = raise infer_error
-  | unop_t A.TAIL (List a) = Arrow (List a, List a)
-  | unop_t A.TAIL _ = raise infer_error
+fun unop_t A.NEG _ = (Int, Int)
+  | unop_t A.NOT _ = (Bool, Bool)
+  | unop_t A.HEAD (List a) = (List a, a)
+  | unop_t A.TAIL (List a) = (List a, List a)
+  | unop_t _ _ = raise infer_error
 
 datatype 'a result = Found of 'a | NotFound
+
+fun remove [] a = raise undefined
+  | remove (x::xs) a = if x = a then remove xs a else x::(remove xs a)
 
 (* Finds the specified key in a (k, v) list *)
 fun find [] a = NotFound
@@ -50,6 +53,9 @@ fun find [] a = NotFound
 fun insert [] (k, v) = [(k, v)]
   | insert ((k', v')::xs) (k, v) = if k' = k then (k, v)::xs 
                                    else (k', v')::(insert xs (k, v))
+
+fun findv env v = find env (V v)
+fun insertv env (k, v) = insert env ((V k), v)
 
 (* labels an AST node using c as its label *)
 fun label (A.Ident s) c m = 
@@ -110,16 +116,88 @@ fun gen_es (Number (x, l)) es = (l, Int)::es
   | gen_es (Ident (s, l)) es = es
  (* | gen_es (NilList l) es = (List l)::es *)
   | gen_es (UnOp (unop, e, l)) es = 
-    (l, unop_t unop (lex2lab e))::((gen_es e []) @ es)
+    let
+        val (t1, t2) = unop_t unop (lex2lab e)
+    in
+        (l, t2)::(lex2lab e, t1)::(gen_es e es)
+    end
   | gen_es (BinOp (binop, e1, e2, l)) es =
-    (l, binop_t binop (lex2lab e1) (lex2lab e2))::((gen_es e1 [] )@(gen_es e2 [])@es)
+    let
+        val (t1, t2, t3) = binop_t binop (lex2lab e1) (lex2lab e2)
+        val es' = (gen_es e1 (gen_es e2 es))
+    in
+        (l, t3)::(lex2lab e1, t1)::(lex2lab e2, t2)::es'
+    end
   | gen_es (Abs ((x, lx), e, l)) es =
     (l, Arrow (lx, lex2lab e))::((gen_es e [] ) @ es)
   | gen_es (App (e1, e2, l)) es =
     (lex2lab e1, Arrow (lex2lab e2, l))::((gen_es e1 [])@(gen_es e2 [])@es)
 
-fun infer e = Int
+fun unify (t1, t2) env =
+    let
+        fun subst env (Arrow (a, b)) = Arrow (subst env a, subst env b)
+          | subst env (V v) = (case findv env v of (Found x) => x
+                                                | _ => (V v))
+          | subst env t = t
 
-fun toString _ = raise undefined
+        fun tsubst env (V v) = (case findv env v of (Found x) => x
+                                                 | _ => (V v))
+          | tsubst _ t = t
+
+        fun free v Int _ = true
+          | free v1 (V v2) env = (case findv env v2 of (Found t) => free v1 t env
+                                                    | NotFound => v1 <> v2)
+          | free v (Arrow (t1, t2)) env = free v t1 env andalso free v t2 env
+
+        fun unify_var v1 (V v2) env = if v1 = v2 then env
+                                      else insertv env (v1, V v2)
+          | unify_var v1 v2 env = if free v1 t2 env
+                                  then insertv env (v1, t2)
+                                  else raise infer_error
+
+        fun unify' Bool Bool env = env
+          | unify' Int Int env = env
+          | unify' (Arrow (a, b)) (Arrow (c, d)) env =
+            unify (a, c) (unify (b, d) env)
+          | unify' t (V v) env = unify_var v t env
+          | unify' (V v) t env = unify_var v t env
+          | unify' t1 t2 _ = raise infer_error
+
+    in
+        unify' (tsubst env t1) (tsubst env t2) env
+    end
+
+fun toString (V v) =
+    if v < 26 then Char.toString(Char.chr(97+v))
+    else if v < 52 then Char.toString(Char.chr(64+(v-26)))
+         else "(a{" ^ Int.toString(v-52) ^ "})"
+  | toString (Int) = "int"
+  | toString (Bool) = "bool"
+  | toString (Arrow(t1, t2)) = "(" ^ toString(t1) ^ ") -> (" ^ 
+                                   toString(t2) ^ ")"
+  | toString (List(sigma)) = "[" ^ toString(sigma) ^ "]"
 
 end
+
+fun print_eq (t1, t2) = print ((toString t1) ^ " && " ^ (toString t2) ^ "\n")
+
+fun infer e = 
+    let
+        val (labeled, _, _) = label e 0 []
+        val eqns = gen_es labeled []
+        fun try [] env = env
+          | try (eq::eqs) env =
+            ((print_eq eq) ; 
+             try eqs (unify eq env))
+        fun run env = 
+            let
+                val env' = try env env
+            in
+                if env' = env then env'
+                else run env'
+            end
+    in
+        run eqns
+    end
+    
+
