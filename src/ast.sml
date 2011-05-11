@@ -60,9 +60,10 @@ struct
         ")"
     | ast2str(NilList) = "[]"
     | ast2str(Cond(a, t, f)) =
-        "if " ^ ast2str(a) ^ " then " ^ ast2str(t) ^ " else " ^ ast2str(f)
+        "if " ^ ast2str(a) ^ " then " ^ ast2str(t) ^ " else " ^ ast2str(f) ^
+        "endif"
     | ast2str(Abs(v, body)) =
-        "fn " ^ v ^ " => " ^ ast2str(body)
+        "(" ^ "fn " ^ v ^ " => " ^ ast2str(body) ^ ")"
     | ast2str(App(rator, rand)) =
         "(" ^ ast2str(rator) ^ ")(" ^ ast2str(rand) ^ ")"
 
