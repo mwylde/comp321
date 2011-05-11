@@ -1,0 +1,3 @@
+val x = 4 * 10 - 20;
+val f = fn x => x * x;
+val y = (f x) - (400 - 8);

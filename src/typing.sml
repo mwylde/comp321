@@ -146,16 +146,17 @@ fun unify (t1, t2) envx =
                                                  | _ => (V v))
          | tsubst _ t = t
 
-       fun bound v Int _ = false
-         | bound v Bool _ = false
-         | bound v1 (V v2) env = (case findv env v2 of (Found t) => bound v1 t env
+       fun occurs v Int _ = false
+         | occurs v Bool _ = false
+         | occurs v1 (V v2) env = (case findv env v2 of (Found t) => occurs v1 t env
                                                      | NotFound => v1 = v2)
-         | bound v (Arrow (t1, t2)) env = bound v t1 env orelse bound v t2 env
+         | occurs v (Arrow (t1, t2)) env = occurs v t1 env orelse occurs v t2 env
+         | occurs v (List t) env = occurs v t env
                                                                  
        fun unify_var v1 (V v2) env = if v1 = v2 then env
                                      else insertv env (v1, V v2)
-         | unify_var v1 t2 env = if bound v1 t2 env
-                                 then insertv env (v1, subst env t2)
+         | unify_var v1 t2 env = if occurs v1 t2 env
+                                 then raise infer_error
                                  else insertv env (v1, subst env t2)
 
        fun unify' Bool Bool env = env
@@ -188,8 +189,7 @@ fun infer e =
         val eqns = gen_es labeled []
         fun try [] env = env
           | try (eq::eqs) env =
-            ((print_eq eq) ; 
-             try eqs (unify eq env))
+             try eqs (unify eq env)
         fun run env = 
             let
                 val env' = try env env
