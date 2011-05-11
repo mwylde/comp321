@@ -242,7 +242,7 @@ fun parse_expression t =
                        | T.EOS => (#1 (handle_rparen (trees, ops)))
                        | tok => parse_rec (handle_token (trees, ops) tok)
     in
-        expToAST (hd (parse_rec ([BGroup], [NoOp])))
+        expToAST (hd (parse_rec ([BGroup], [ILParen])))
     end
 
 fun parse_program t = 
