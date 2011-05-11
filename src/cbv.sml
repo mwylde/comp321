@@ -139,7 +139,14 @@ fun eval_val (C (head, tail)) = C (eval_val head, eval_val tail)
 
 fun eval_expr e = eval_val (V (e, []))
 
-fun eval_pgm _ = raise undefined
+fun eval_pgm p =
+    let
+        fun combine_stmts ((Assign (x, e))::[]) = e
+          | combine_stmts ((Assign (x, e))::ss) = 
+            App (Abs (x, combine_stmts ss), e)
+    in
+        eval_expr (combine_stmts p)
+    end
 
 fun value2ast (V (Ident x, env)) = 
     (case find env x of (Found v) => value2ast(v)
