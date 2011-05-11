@@ -6,6 +6,7 @@ open Ast
 exception undefined
 exception expected_number
 exception expected_bool
+exception expected_list
 exception only_idents
 
 exception free_var_in_expr
@@ -21,9 +22,10 @@ fun insert [] (k, v) = [(k, v)]
   | insert ((k', v')::xs) (k, v) = if k' = k then (k, v)::xs 
                                    else (k', v')::(insert xs (k, v))
 
-datatype value = V of expr*((ident*value) list)
+datatype value = V of expr*((ident*value) list) | C of value*value
 
-fun eval_val (V (ve, e)) = 
+fun eval_val (C (head, tail)) = C (eval_val head, eval_val tail)
+  | eval_val (V (ve, e)) = 
     let 
         fun eval_num_bin f (V (Number x, _)) (V (Number y, _)) = 
             V (Number (f(x, y)), [])
@@ -51,10 +53,24 @@ fun eval_val (V (ve, e)) =
         val eval_and = eval_bool_bin (fn (a, b) => a andalso b)
         val eval_or = eval_bool_bin (fn (a, b) => a orelse b)
 
+        fun eval_cons v1 v2 = 
+            let
+                val head = eval_val v1
+                val tail = eval_val v2
+            in
+                C (head, tail)
+            end
+
         fun eval_neg (V (Number x, _)) = V (Number (~x), [])
           | eval_neg _ = raise expected_number
         fun eval_not (V (Boolean a, _)) = V (Boolean (not a), [])
           | eval_not _ = raise expected_bool
+
+        fun eval_hd (C (v1, v2)) = eval_val v1
+          | eval_hd _ = raise expected_list
+
+        fun eval_tl (C (v1, v2)) = eval_val v2
+          | eval_tl _ = raise expected_list
 
         fun eval_unop unop e =
             let 
@@ -62,8 +78,8 @@ fun eval_val (V (ve, e)) =
             in
                 case unop of NEG => eval_neg v
                            | NOT => eval_not v
-            (* | HEAD => eval_head e' *)
-            (* | TAIL => eval_tail e' *)
+                           | HEAD => eval_hd v
+                           | TAIL => eval_tl v
             end
 
         fun eval_binop binop e1 e2 =
@@ -83,7 +99,7 @@ fun eval_val (V (ve, e)) =
                             | NE => eval_ne e1' e2'
                             | AND => eval_and e1' e2'
                             | OR => eval_or e1' e2'
-            (*                  | CONS => eval_cons e1' e2' *)
+                            | CONS => eval_cons e1' e2'
             end
 
         fun eval_cond v1 v2 v3 =
@@ -139,5 +155,6 @@ fun value2ast (V (Ident x, env)) =
   | value2ast (V (Abs (x, e0), env)) =
     Abs (x, value2ast (V (e0, env)))
   | value2ast (V (ve, _)) = ve
+  | value2ast (C (v1, v2)) = BinOp(CONS, value2ast v1, value2ast v2)
 
 end
